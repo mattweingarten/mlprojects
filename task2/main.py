@@ -124,57 +124,27 @@ def score(clf,tests,labels):
 def main():
     set_up_start = time.time()
     samples,labels = setup()
-    print("done setup")
+    n,m = samples.shape
+    print("--------------------------------\ndone setup")
     train_start = time.time()
     setup_duration = train_start - set_up_start
-    print "Preprocessing takes: %.1f second"  % setup_duration
+    print "Preprocessing takes: %.1f seconds\n--------------------------------"  % setup_duration
     train_start = time.time()
-    clf = train_model(samples[0:1000],labels[0:1000])
-    print("done training")
+    clf = train_model(samples[0:2000],labels[0:2000])
+    print("--------------------------------\ndone training")
     train_duration = time.time() - train_start
-    print "Training takes: %.1f second"  % train_duration
-    print(predict_sigmoid(clf,samples[10001:10010]))
-    print(predict(clf,samples[10001:10010]))
-    print(labels[10001:10010])
-    print(score(clf,samples[15000:18000],labels[15000:18000]))
+    print "Training takes: %.1f seconds\n--------------------------------"  % train_duration
+    # print(predict_sigmoid(clf,samples[10001:10010]))
+    # print(predict(clf,samples[10001:10010]))
+    # print(labels[10001:10010])
+    #score is very harsh since it requires all labels to be correct for it to be a valid entry
+    print "--------------------------------\nScore is: %.5f\n--------------------------------" % score(clf,samples[10000:n],labels[10000:n])
 
 
 
 
 
 
-# def practice():
-#      X = np.array([
-#                         [1,3,4,120,29],
-#                         [2,3,27,155,18],
-#                         [4,1,11,110,28]
-#                   ])
-#      y = np.array([
-#                     [1,0,1,0,1],
-#                     [0,1,0,1,0],
-#                     [0,0,0,0,1]
-#                   ])
-#
-#      p = np.array([
-#                         [0,1.5,4,131,19],
-#                         [2,3,27,155,18],
-#                         [4,1,11,110,28]
-#                    ])
-#      print(X)
-#      scaler = StandardScaler(copy=False)
-#      scaler.fit(X)
-#      X = scaler.transform(X)
-#      print(X)
-#
-#      inner_clf = svm.SVC(kernel='linear',probability=False,decision_function_shape='ovo')
-#
-#      clf = OneVsRestClassifier(inner_clf).fit(X,y)
-#      raw_res = map_sigmoid(clf.decision_function(p))
-#      print(raw_res)
-#      # print(restructure_predict(raw_res))
-#
-#      print(clf.predict(p))
 
-# practice()
 
 main()
