@@ -15,7 +15,8 @@ from sklearn import linear_model
 import time
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import roc_auc_score
 
 np.set_printoptions(precision=5,suppress=True, linewidth=300)
 
@@ -108,28 +109,64 @@ def flatten(raw_data):
         for j in range(12):
             res[i][1 + j * tw] = raw_data[i*12 + j][1]
             res[i][(1 + j * tw + 1) :  (1 + (j+1) * tw)  ]  = raw_data[i*12+j][3:w]
-
     return res
 
-def patient_pca(data):
-    pca = PCA(n_components=1).fit(data)
-    # print(pca.singular_values_)
-    # print(pca.explained_variance_ratio_)
-    return pca.components_[0]
+def patient_pca(data,c):
+    pca = PCA(n_components=c).fit(data)
+    return np.reshape(pca.components_,(pca.components_.size,1))[0]
 
-def flatten_pca(raw_data):
+def get_patient_matrix(raw_data,i):
     n,w = raw_data.shape
-    res = np.zeros((n/12,w-2))
+    return raw_data[(12 * i): (12 *(i+1))][:,3:w]
+
+def flatten_pca(raw_data,c):
+    n,w = raw_data.shape
+    res = np.zeros((n/12,c*(w-2)))
     temp = np.zeros((12,w-3))
     for i in range(n/12):
-        temp = raw_data[(12 * i): (12 *(i+1))][:,3:w]
+        temp = get_patient_matrix(raw_data,i)
         for j in range (w-3):
             temp[:,j] = interp(temp[:,j])
 
         res[i][0] = raw_data[i * 12][2] /100
-        res[i][1:w-2] = patient_pca(temp)
+        # print(patient_pca(temp,c))
+        res[i][1:c*w-2] = patient_pca(temp,c)
     return res
 
+
+# we use four values for each column
+def flatten_min_max_slope(raw_data):
+    n,w =  raw_data.shape
+    c = w - 3
+    means = np.nanmean(raw_data,axis=0)
+    res = np.zeros((n/12,1 + c * 3))
+    temp = np.zeros((12,c))
+    for i in range(n/12):
+        temp = get_patient_matrix(raw_data,i)
+        for j in range (c):
+            temp[:,j] = interp(temp[:,j])
+        res[i][0] = raw_data[i * 12][2]
+        for j in range (c):
+            min = np.min(temp[:,j])
+            max = np.max(temp[:,j])
+            # if(min == 0):
+            #     min = means[j + 3]
+            # if(max == 0):
+            #     max = means[j + 3]
+            res[i][j*3+1] = min
+            res[i][j*3+2] = max
+            # res[i][j*3 + 2] = 0
+            res[i][j*3+3] = (max-min)/12
+    # print(res[0:5])
+    return res
+
+
+def scale(data):
+    n,w = data.shape
+    scaler = StandardScaler(copy=False)
+    scaler.fit(data)
+    data = scaler.transform(data)
+    return data
 # --------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------------------
@@ -137,27 +174,11 @@ def flatten_pca(raw_data):
 def setup():
         raw_data = np.genfromtxt("./data/train_features.csv",delimiter=",",skip_header=1)
         # raw_data = missing_values(raw_data)
-        samples = flatten_pca(raw_data)
+        # samples = flatten_pca(raw_data,1)
+        samples = scale(flatten_min_max_slope(raw_data))
         raw_labels = np.genfromtxt("./data/train_labels.csv",delimiter=",",skip_header=1)
-        labels = raw_labels[:,1:11]
+        labels = raw_labels[:,1:12]
         return samples,labels
-
-
-# def ksplit(k,samples,labels):
-#     n = samples.shape[0]
-#     for i in range(k):
-#
-#     return 0
-
-
-def restructure_predict(raw_results):
-    cols = len(raw_results)
-    rows = raw_results[0].shape[0]
-    result = np.zeros((rows,cols))
-    for j in range(cols):
-        for i in range(rows):
-            result[i][j] = raw_results[j][i][0]
-    return result
 
 
 
@@ -174,14 +195,12 @@ def restructure_predict(raw_results):
 # print(searcher.best_score_)
 
 
-def train_model(samples,labels):
+def model():
     return OneVsRestClassifier(svm.SVC(
                                 kernel='linear',
                                 decision_function_shape='ovr',
-                                probability=False,
-                                gamma=0.1,
-                                C=1,
-                                max_iter=10000)).fit(samples,labels)
+                                C=0.01,
+                                max_iter=10000))
 
 
 def predict_csv(clf):
@@ -191,22 +210,13 @@ def predict_csv(clf):
     return predict(data,clf)
     return restructure_predict(clf.predict_proba(data))
 
-# def predict_proba(clf,data):
-#     return restructure_predict(clf.predict_proba(data))
 
 def predict_sigmoid(clf,data):
     return map_sigmoid(clf.decision_function(data))
 
+def get_roc(samples,labels):
+    return cross_val_score(model(),samples,labels, scoring='roc_auc',cv=5)
 
-def predict(clf,data):
-    return clf.predict(data)
-
-def score(clf,tests,labels):
-    return clf.score(tests,labels)
-
-
-def statistics():
-    print("hello")
 
 def main():
     set_up_start = time.time()
@@ -216,30 +226,12 @@ def main():
     train_start = time.time()
     setup_duration = train_start - set_up_start
     print "Preprocessing takes: %.1f seconds\n--------------------------------"  % setup_duration
-    train_start = time.time()
-    clf = train_model(samples[0:10000],labels[0:10000])
+    roc = get_roc(samples,labels)
+    print roc
+
     print("--------------------------------\ndone training")
     scoring_start = time.time()
     train_duration = scoring_start - train_start
     print "Training takes: %.1f seconds\n--------------------------------"  % train_duration
-
-    # print(predict_sigmoid(clf,samples[10001:10010]))
-    # print(predict(clf,samples[10001:10010]))
-    # print(labels[10001:10010])
-    #score is very harsh since it requires all labels to be correct for it to be a valid entry
-
-    s = score(clf,samples[10000:n],labels[10000:n])
-    scoring_duration = time.time() - scoring_start
-    print("--------------------------------\ndone setup")
-    print "Scoring takes: %.1f seconds" % scoring_duration
-    print "Score is: %.5f\n--------------------------------" % s
-
-
-
-
-
-
-
-
 
 main()
